@@ -175,7 +175,7 @@ void layoutGameOver(sfRenderWindow* window, sfEvent event)
         sfRenderWindow_clear(window, sfColor_fromRGB(0,0,0));
         sfRenderWindow_drawSprite(window, gameover, NULL);
         sfRenderWindow_display(window);
-    } while(!(sfMouse_isButtonPressed(sfMouseLeft) && sfRenderWindow_hasFocus(window) && sfMouse_getPosition(window).y > 0));
+    } while(!(sfMouse_isButtonPressed(sfMouseLeft) && sfRenderWindow_hasFocus(window) && sfMouse_getPosition(window).y > 0));  //Mouse position Y is used to drag the window when the gameover screen is on.
 
     numberlifes = 3;
     }
