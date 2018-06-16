@@ -623,11 +623,20 @@ void gameMenu(sfRenderWindow* window)
 
         switch(flagButton)
         {
+<<<<<<< HEAD
             case 0:     // Loading sprites of the game
                         loadGameSprites("certinho", &level1);
                         do
                         {
                             /// Level 1
+=======
+            case 0:     do
+                        {
+                            /// Level 1
+                            // Loading sprites of the game
+                            loadGameSprites("certinho", &level1);
+
+>>>>>>> 680ea9d36d85d313f3bb0fe8d6b1bd638f0511a2
                             // Setting the Level 1's enemies
                             setEnemies(&level1);
 
@@ -655,7 +664,10 @@ void gameMenu(sfRenderWindow* window)
                                 liveEnemies = nEnemies;
                             }
                         }while(gameoverFlag);
+<<<<<<< HEAD
                         score = 0;
+=======
+>>>>>>> 680ea9d36d85d313f3bb0fe8d6b1bd638f0511a2
                         flagButton = -1;
                         break;
 
