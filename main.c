@@ -1,12 +1,21 @@
-// Constants
+/// Constants
+    // Video's constants
 #define WIDTH 800
 #define HEIGHT 600
+// Energy's bar constants
 #define ENERGYMAX 436
 #define ENERGYY 35
-#define BARSPEED 10.9
+#define BARSPEED 60 // 10.9 - standard
+// Enemies' constants
 #define MAXENEMIES 20
-#define DIST_ENEMY_X 20
+#define DIST_ENEMY_X 10
 #define DIST_ENEMY_Y 50
+#define SPEED_ENEMY 200
+#define ENEMYFIRE_SPEED 300
+// Button's constants
+#define BUTTON_WIDTH 400
+#define BUTTON_HEIGHT 100
+
 
 // SFML headers
 #include <SFML/Graphics.h>
@@ -16,17 +25,43 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <math.h>
 
 /// Structs
+
+// Struct for button
+typedef struct str_button
+{
+    sfText* text;
+    sfRectangleShape* base;
+} TYPE_BUTTON;
+
+// Struct for menu
+typedef struct str_menu
+{
+    sfFont* font;
+    sfText* megamaniaLogo;
+    TYPE_BUTTON buttons[3]; // 0 - PLAY / 1 - OPTIONS / 2 - CREDITS
+    sfSprite* menuBackground;
+} TYPE_MENU;
+
+// Struct for fire
+typedef struct str_fire
+{
+    int flag; // If it's 1, this fire is enabled. Else, it's 0.
+    float posX;
+    float posY;
+}TYPE_FIRE;
 
 // Struct for enemy
 typedef struct str_enemy
 {
-    sfSprite* enemySprite;
     float posX;
     float posY;
+    sfVector2f initialPos;
     int color;
-    int flag; // If this enemy is alive, it's 1,
+    int flag; // If this enemy is alive, it's 1.
+    TYPE_FIRE fire;
 } TYPE_ENEMIES;
 
 // Struct for player ship
@@ -42,9 +77,15 @@ typedef struct str_sprites
 {
     TYPE_PLAYERSHIP ship;
     sfSprite* fire;
+    sfSprite* enemyFire;
     sfSprite* background;
     sfSprite* life;
     sfSprite* lifebar;
+    sfSprite* gameover;
+    sfSprite* enemyBlack;
+    sfSprite* enemyRed;
+    sfSprite* enemyBlue;
+    sfSprite* enemyGreen;
     TYPE_ENEMIES enemies[MAXENEMIES];
     sfRectangleShape* fillLifeBar;
     sfRectangleShape* fillLifeBar2;
@@ -58,12 +99,13 @@ typedef struct str_level
     int levelSpeed;
     char direction; // Can be 'R', to right, 'L', to left, or 'B', to both synchronously.
     int numberEnemies;
+    int paused;
 } TYPE_LEVEL;
 
 /// Defining some useful functions
 
 // This bundles together a sprite with a texture, and the origin in the middle.
-sfSprite* sfSprite_createFromFile(const char* filename, sfVector2f scale, sfVector2f pos);
+sfSprite* sfSprite_createFromFile(char* spriteMode, const char* filename, sfVector2f scale, sfVector2f pos);
 // This draws the lifes on the screen (uses sfSprite_createFromFile).
 void drawLifes(sfRenderWindow* window, sfSprite* life, int* numL);
 // This creates one enemy and returns it.
@@ -77,12 +119,32 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level);
 // This loads Game Over screen
 void layoutGameOver(sfRenderWindow* window, sfEvent event);
 // This load the sprites of the game by a level. src can be "certinho" or "zuadasso".
-void loadGameSprites(const char src[], TYPE_LEVEL* level);
+void loadGameSprites(const char spriteMode[], TYPE_LEVEL* level);
 // This returns the number of enemy in the array, if the sprite given has the same position than that enemy. Else, it returns -1.
 int isAtSamePoint(TYPE_ENEMIES* enemies, int *tamArray, sfSprite* sprite);
-// This sets all the enmies's flags to 1, given an array
-void returnToLife(TYPE_ENEMIES enemies[MAXENEMIES], int sizeArray);
-
+// This creates a button with some text
+TYPE_BUTTON createButton(char stringText[50], float textSize, sfVector2f position, sfVector2f baseSize, sfColor cBase);
+// This is the menu of the game
+void gameMenu(sfRenderWindow* window);
+// This shows the credits
+void showCredits (sfRenderWindow* window);
+// This will check if the sprite is out of the screen
+int outOfScreen(sfSprite* sprite, float hScreen, float wScreen);
+// This sets the score according the current energy bar, after the level's end
+float scoreByEnergyBar (float energy, float maxEnergy);
+// This moves the enemies according the level
+void moveEnemies(TYPE_LEVEL level, TYPE_ENEMIES enemies[MAXENEMIES], int sizeArray, float dtime);
+//int fillEnergyBarAnimation(sfRenderWindow* window, TYPE_ALLSPRITES sprites, int dtime, float * energy);
+// This function sets which enemies will shoot in one frame
+int Enemies_Shooting(TYPE_ENEMIES enemies[], int numberEnemies, int livingEnemies, int levelSpeed);
+// This function draws all the enemies's fires which are enabled.
+void Enemies_DrawFires(sfRenderWindow *window, sfSprite* sprite, TYPE_ENEMIES enemies[], int numberEnemies);
+// This function moves all the fires which are enabled. Also, it checks if the player was hit
+int Enemies_MovingFires(float speedY, TYPE_ENEMIES enemies[], int numberEnemies, float dtime, TYPE_PLAYERSHIP player);
+// This function returns the quantity of current enemies's fires on the screen.
+int Enemies_HowManyFires(TYPE_ENEMIES enemies[], int numberEnemies);
+// This function check if the point is at the same point of the sprite
+int sfSprite_CollisionPoint(sfSprite* sprite, sfVector2f point);
 
 /// Variables
 
@@ -90,6 +152,7 @@ void returnToLife(TYPE_ENEMIES enemies[MAXENEMIES], int sizeArray);
 float energy = ENERGYMAX;
 int numberlifes = 3;
 int nEnemies = 0;
+int liveEnemies = 0;
 int score = 0;
 
 // Mouse variables
@@ -108,10 +171,9 @@ TYPE_LEVEL level2;
 TYPE_LEVEL chosenLevel; // We didn't use it yet
 
 
-
 int main()
 {
-    // Initializing map names
+     // Initializing map names
     level1.mapName = "map_1.txt";
     level2.mapName = "map_2.txt";
 
@@ -123,7 +185,7 @@ int main()
     window = sfRenderWindow_create(mode, "Megamania", sfResize | sfClose, NULL);
 
     // Playing level
-    layoutStage(window, level1);
+    gameMenu(window);
 
     // Cleanup resources
     sfSprite_destroy(gameSprites.ship.shipSprite);
@@ -144,8 +206,18 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level)
     float dtime = 0;
 
     sfEvent event;
+
     // Flags
-    int isFireable = 1; //Fire flag
+    int isFireable = 1;
+    int pPressedLastTime = 0;
+    int shouldLoop = 1; // Used to indicate whether it should continue looping or not
+
+    // Animations
+    int animating = 1; // 1 - started stage, 2 - just died
+    // These are used to control the amount of time the animations run:
+    float timeOfDeath = 0; // How many seconds the death animation has been running
+    float timeOfLife = 0; // How many seconds the "being born" animation has been running
+    float timeOfPhaseOut = 0; //How many seconds the "getting out of level" animation has been running
 
     // Enemy dead in this frame
     int positionEnemyDead;
@@ -172,8 +244,14 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level)
     /// Loading sprites
     loadGameSprites("certinho", &level);
 
+    // Energy Bar
+    energy = 0;
+
+    // Enemies's fires
+    Enemies_Shooting(gameSprites.enemies, nEnemies, liveEnemies, level.levelSpeed);
+
     /// Loop of the layout
-    while(sfRenderWindow_isOpen(window))
+    while(shouldLoop)
     {
         /// Code to close the window
         while(sfRenderWindow_pollEvent(window, &event))
@@ -184,33 +262,55 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level)
         }
 
         /// Logic of the layout
-        // When the energy ends
-        if(energy <= 0)
+
+        // When the energy ends, you lose a life (not valid if it's doing the animation)
+        if(energy <= 0 && !animating)
         {
-            numberlifes--;
-            if(numberlifes == 0)
-            {
-                layoutGameOver(window, event);
-
-                // If you don't restart the time, it keeps running and bugs the energy
-                sfClock_restart(clock);
-                time = sfClock_getElapsedTime(clock);
-                lasttime = time;
-                dtime = sfTime_asSeconds(time) - sfTime_asSeconds(lasttime);
-            }
-
-            energy = ENERGYMAX;
-            sfSprite_setPosition(gameSprites.ship.shipSprite, (sfVector2f){WIDTH/2, 450});
-            sfSprite_setPosition(gameSprites.fire, (sfVector2f){ -40, -40});
+            numberlifes--;  // -1 life ;-;
+            animating = 2;
         }
 
-        // Ship - Player movement
-        if((sfKeyboard_isKeyPressed(sfKeyLeft)||sfKeyboard_isKeyPressed(sfKeyA)) && sfSprite_getPosition(gameSprites.ship.shipSprite).x > 40 && sfRenderWindow_hasFocus(window))
-            sfSprite_move(gameSprites.ship.shipSprite, (sfVector2f){-300*dtime, 0});
-        if((sfKeyboard_isKeyPressed(sfKeyRight)||sfKeyboard_isKeyPressed(sfKeyD)) && sfSprite_getPosition(gameSprites.ship.shipSprite).x < 760 && sfRenderWindow_hasFocus(window))
-            sfSprite_move(gameSprites.ship.shipSprite, (sfVector2f){300*dtime, 0});
+        /// Pause Logic
+        // Makes sure you don't pause and unpause every frame when the button is pressed
+        if(sfKeyboard_isKeyPressed(sfKeyP))
+        {
+            if(!pPressedLastTime)
+            {
+                level.paused = !level.paused;
+            }
+            pPressedLastTime = 1;
+        }
+        else
+        {
+            pPressedLastTime = 0;
+        }
 
+        if(!level.paused)
+        {
+            ///Player Interactions
+            //they gotta be inside this condition here, so the player can't interact while it's paused.
 
+            // Ship - Player movement
+            if((sfKeyboard_isKeyPressed(sfKeyLeft)||sfKeyboard_isKeyPressed(sfKeyA)) && sfSprite_getPosition(gameSprites.ship.shipSprite).x > 40 && sfRenderWindow_hasFocus(window))
+                sfSprite_move(gameSprites.ship.shipSprite, (sfVector2f){-300*dtime, 0});
+            if((sfKeyboard_isKeyPressed(sfKeyRight)||sfKeyboard_isKeyPressed(sfKeyD)) && sfSprite_getPosition(gameSprites.ship.shipSprite).x < 760 && sfRenderWindow_hasFocus(window))
+                sfSprite_move(gameSprites.ship.shipSprite, (sfVector2f){300*dtime, 0});
+
+            // Action of firing the blast
+            if(sfKeyboard_isKeyPressed(sfKeySpace) && isFireable && sfRenderWindow_hasFocus(window))
+            {
+                sfSprite_setPosition(gameSprites.fire, (sfVector2f){sfSprite_getPosition(gameSprites.ship.shipSprite).x, sfSprite_getPosition(gameSprites.ship.shipSprite).y - 40});
+            }
+        }
+
+        // Fire - moves the blast
+        if(!outOfScreen(gameSprites.fire, HEIGHT, WIDTH))
+        {
+            sfSprite_setPosition(gameSprites.fire, (sfVector2f){sfSprite_getPosition(gameSprites.ship.shipSprite).x, sfSprite_getPosition(gameSprites.fire).y -600*dtime});
+            isFireable = 0;
+        }
+        else
+            isFireable = 1;
         // Fire - check collisions
         positionEnemyDead = isAtSamePoint(gameSprites.enemies, &nEnemies, gameSprites.fire); // PositionEnemyDead will update every frame
 
@@ -219,29 +319,143 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level)
             gameSprites.enemies[positionEnemyDead].flag = 0;    // Killing the enemy
             sfSprite_setPosition(gameSprites.fire, (sfVector2f){-40, -40}); // Setting another position to fire
             isFireable = 1;     // Making possible to fire again
+            liveEnemies--;
             score += 20;
         }
 
-        // Fire - moves the blast
-        if(sfKeyboard_isKeyPressed(sfKeySpace) && isFireable && sfRenderWindow_hasFocus(window))
+        /// Enemies
+        moveEnemies(level, gameSprites.enemies, nEnemies, dtime);
+
+        // Enemies's fires
+        if(!Enemies_HowManyFires(gameSprites.enemies, nEnemies))
+            Enemies_Shooting(gameSprites.enemies, nEnemies, liveEnemies, level.levelSpeed);
+
+        if(Enemies_MovingFires(ENEMYFIRE_SPEED, gameSprites.enemies, nEnemies, dtime, gameSprites.ship))
+            energy = 0;
+
+        // Dying condition, plays the dying animation
+        if(numberlifes == 0 && timeOfDeath < 1)
+            animating = 2;
+
+        // Killed all enemies? play the "get them points son" animation
+        if(liveEnemies == 0)
+            animating = 3;
+
+        // Energy bar
+        if(!animating)
         {
-            sfSprite_setPosition(gameSprites.fire, (sfVector2f){sfSprite_getPosition(gameSprites.ship.shipSprite).x, sfSprite_getPosition(gameSprites.ship.shipSprite).y - 40});
+            energy -= BARSPEED*dtime; // To empty the life bar
+            sfRectangleShape_setSize(gameSprites.fillLifeBar2, (sfVector2f){energy, ENERGYY});
         }
-        if(sfSprite_getPosition(gameSprites.fire).y >= -40)
-        {
-            sfSprite_setPosition(gameSprites.fire, (sfVector2f){sfSprite_getPosition(gameSprites.ship.shipSprite).x, sfSprite_getPosition(gameSprites.fire).y -600*dtime});
-            isFireable = 0;
-        }
+        /// Animation
         else
-            isFireable = 1;
+        {
+            // No matter what's the animation:
+            // Pause the game
+            level.paused = 1;
+            // Calculate dtime inside
+            time = sfClock_getElapsedTime(clock);
+            dtime = sfTime_asSeconds(time) - sfTime_asSeconds(lasttime);
+            lasttime = time;
 
-        energy -= BARSPEED*dtime; // To empty the life bar
-        sfRectangleShape_setSize(gameSprites.fillLifeBar2, (sfVector2f){energy, ENERGYY});
+            // If level has just started - "being born"
+            if(animating == 1)
+            {
+                energy += ENERGYMAX*dtime;
+                if(energy > ENERGYMAX)
+                    energy = ENERGYMAX;
+                sfRectangleShape_setSize(gameSprites.fillLifeBar2, (sfVector2f){energy, ENERGYY});
 
-//a
+                // Plays the animation for 1 second
+                if(timeOfLife < 1)
+                {
+                    sfSprite_setColor(gameSprites.ship.shipSprite, sfColor_fromRGBA(255,255,255, timeOfLife*255));
+                }
+                else if(energy == ENERGYMAX)
+                {
+                    // End the animation, reset timeOfLife and unpause the game
+                    animating = 0;
+                    timeOfLife = 0;
+                    level.paused = 0;
+                }
+                timeOfLife += dtime;
+            }
+            // If player has died
+            else if(animating == 2)
+            {
+                // Plays the animation for 1 second
+                if(timeOfDeath < 1)
+                {
+                    sfSprite_setColor(gameSprites.ship.shipSprite, sfColor_fromRGBA(255,(1-timeOfDeath)*255, (1-timeOfDeath)*255, (1-timeOfDeath)*255));
+                }
+                else
+                {
+                    // End the animation, unpause the game, reset timeOfDeath and exit loop (replay stage)
+                    animating = 0;
+                    level.paused = 0;
+                    timeOfDeath = 0;
+                    if(numberlifes == 0)
+                        shouldLoop = 0;
+                    else
+                    {
+                        animating = 1;
+                        sfSprite_setPosition(gameSprites.ship.shipSprite, (sfVector2f) {WIDTH/2, 450});
+                    }
+                }
+                timeOfDeath += dtime;
+            }
+            // If you've just beat a stage - "getting out of level"
+            else if(animating == 3)
+            {
+                // Decrease the energy bar, increase the score.
+                energy -= ENERGYMAX*dtime;
+                score += scoreByEnergyBar(ENERGYMAX*dtime, ENERGYMAX);
+
+                // Makes sure the energy never gets below 0, and that you don't get more points than you should
+                if(energy < 0)
+                {
+                    score += scoreByEnergyBar(-energy, ENERGYMAX);
+                    energy = 0;
+                }
+                sfRectangleShape_setSize(gameSprites.fillLifeBar2, (sfVector2f){energy, ENERGYY});
+
+                // If you have full energy, the animation takes 1 second. If not, it takes a fraction of a second
+                if(timeOfPhaseOut < energy/ENERGYMAX)
+                {
+                    // Some math to figure out the ship's alpha value, so that it ends when the energy bar is emptied.
+                    sfSprite_setColor(gameSprites.ship.shipSprite, sfColor_fromRGBA(255,255,255, (1-(ENERGYMAX*timeOfPhaseOut/energy))*255));
+                }
+                else if(energy == 0)
+                {
+                    // End the animation, unpause the game, reset timeOfPhaseOut and exit loop (go to next stage)
+                    animating = 0;
+                    level.paused = 0;
+                    timeOfPhaseOut = 0;
+                    shouldLoop = 0;
+                }
+                timeOfPhaseOut += dtime;
+            }
+        }
+
+
         // Text for score
         itoa(score, scoreString, 10);
         sfText_setString(textForScore, scoreString);
+
+        /// Calculate dtime
+        if(level.paused)
+        {
+            dtime = 0;
+            // Still gotta calculate the time passed, so dtime doesn't get crazy
+            time = sfClock_getElapsedTime(clock);
+            lasttime = time;
+        }
+        else
+        {
+            time = sfClock_getElapsedTime(clock);
+            dtime = sfTime_asSeconds(time) - sfTime_asSeconds(lasttime);
+            lasttime = time;
+        }
 
         /// Actual drawing
         sfRenderWindow_clear(window, sfColor_fromRGB(0,0,0));
@@ -255,22 +469,14 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level)
         sfRenderWindow_drawRectangleShape(window, gameSprites.fillLifeBar2, NULL);
         drawEnemies(window, gameSprites.enemies, nEnemies);
         sfRenderWindow_drawText(window, textForScore, NULL);
-
+        Enemies_DrawFires(window, gameSprites.enemyFire, gameSprites.enemies, nEnemies);
         sfRenderWindow_display(window);
-
-        // Calculate dtime
-        time = sfClock_getElapsedTime(clock);
-        dtime = sfTime_asSeconds(time) - sfTime_asSeconds(lasttime);
-        lasttime = time;
     }
+    //score += scoreByEnergyBar(energy, ENERGYMAX);
 }
 
 void layoutGameOver(sfRenderWindow* window, sfEvent event)
 {
-    sfSprite* gameover = sfSprite_createFromFile("gameover.png",
-                                                 (sfVector2f){1,1},
-                                                 (sfVector2f){WIDTH/2, HEIGHT/2});
-
     do
     {
         /// Code to close the window
@@ -283,72 +489,93 @@ void layoutGameOver(sfRenderWindow* window, sfEvent event)
 
         sfSleep(sfMilliseconds(10));
         sfRenderWindow_clear(window, sfColor_fromRGB(0,0,0));
-        sfRenderWindow_drawSprite(window, gameover, NULL);
+        sfRenderWindow_drawSprite(window, gameSprites.gameover, NULL);
         sfRenderWindow_display(window);
-    } while(!(sfMouse_isButtonPressed(sfMouseLeft) && sfRenderWindow_hasFocus(window) && sfMouse_getPosition(window).y > 0));  //Mouse position Y is used to drag the window when the gameover screen is on.
+    } while(!(sfMouse_isButtonPressed(sfMouseLeft) && sfRenderWindow_hasFocus(window) && sfMouse_getPosition(window).y > 0));
+    //Mouse position Y is used to drag the window when the gameover screen is on.
 
-    returnToLife(gameSprites.enemies, nEnemies);
+    // Setting config as the first level
+    setEnemies(&level1);
     score = 0;
-
     numberlifes = 3;
 }
 
-void loadGameSprites(const char src[], TYPE_LEVEL* level)
+void loadGameSprites(const char spriteMode[], TYPE_LEVEL* level)
 {
-    if(strcmp(src, "certinho") == 0)
-    {
-        // Ship
-        gameSprites.ship.shipSprite = sfSprite_createFromFile("nave.png",
-                                               (sfVector2f){0.8,0.8},
-                                               (sfVector2f){WIDTH/2, 450});
+    // Loads the sprites according with the sprite mode ("certinho" or "zuadasso")
+    //char spriteMode[15];
+    //strcpy(spriteMode, src);
+    //strcat(spriteMode,"/");
 
-        // Enemies
-        setEnemies(level); // In this function all about enemies and the level is done
+    //char spritePath[50];
+    // We have to call this every time we create a new sprite, to reset the path to the spriteMode
+    //strcpy(spritePath, spriteMode);
 
-        // Fire
-        gameSprites.fire = sfSprite_createFromFile("fire.png",
-                                               (sfVector2f){0.5,0.5},
-                                               (sfVector2f){-40, -40});
+    gameSprites.ship.shipSprite = sfSprite_createFromFile(spriteMode, "nave.png",
+                                                         (sfVector2f){0.8,0.8},
+                                                         (sfVector2f){WIDTH/2, 450});
 
-        // Background
-        gameSprites.background = sfSprite_createFromFile("background.png",
-                                                     (sfVector2f){3.125, 2.3475},
-                                                     (sfVector2f){WIDTH/2, HEIGHT/2});
+    // Fire
+    gameSprites.fire = sfSprite_createFromFile(spriteMode, "fire.png",
+                                            (sfVector2f){0.5,0.5},
+                                            (sfVector2f){-40, -40});
 
-        // Lifes
-        gameSprites.life = sfSprite_createFromFile("life.png",
-                                               (sfVector2f){1,1},
-                                               (sfVector2f){350,575});
+    // Enemy fire
+    gameSprites.enemyFire = sfSprite_createFromFile(spriteMode, "fire.png",
+                                            (sfVector2f){0.5,0.5},
+                                            (sfVector2f){-40, -40});
+    sfSprite_setColor(gameSprites.enemyFire, sfColor_fromRGB(255, 100, 255));
 
-        // Life bar
-        gameSprites.lifebar = sfSprite_createFromFile("lifebar.png",
-                                                  (sfVector2f){2, 1},
-                                                  (sfVector2f){WIDTH/2, 525});
+    // Background
+    gameSprites.background = sfSprite_createFromFile(spriteMode, "background.png",
+                                                  (sfVector2f){3.125, 2.3475},
+                                                  (sfVector2f){WIDTH/2, HEIGHT/2});
 
-        gameSprites.fillLifeBar = sfRectangleShape_create();
-        sfRectangleShape_setSize(gameSprites.fillLifeBar, (sfVector2f){436, 35});
-        sfRectangleShape_setPosition(gameSprites.fillLifeBar, (sfVector2f){182, 507.5});
-        sfRectangleShape_setFillColor(gameSprites.fillLifeBar, sfColor_fromRGB(255,255,255));
+    // Lifes
+    gameSprites.life = sfSprite_createFromFile(spriteMode, "life.png",
+                                            (sfVector2f){1,1},
+                                            (sfVector2f){350,575});
 
-        gameSprites.fillLifeBar2 = sfRectangleShape_create();
-        sfRectangleShape_setSize(gameSprites.fillLifeBar2, (sfVector2f){energy, ENERGYY});
-        sfRectangleShape_setPosition(gameSprites.fillLifeBar2, (sfVector2f){182, 507.5});
-        sfRectangleShape_setFillColor(gameSprites.fillLifeBar2, sfColor_fromRGB(100,0,0));
+    // Life bar
+    gameSprites.lifebar = sfSprite_createFromFile(spriteMode, "lifebar.png",
+                                               (sfVector2f){2, 1},
+                                               (sfVector2f){WIDTH/2, 525});
 
-        // GUI
-        gameSprites.base = sfRectangleShape_create();
-        sfRectangleShape_setSize(gameSprites.base, (sfVector2f){WIDTH, 100});
-        sfRectangleShape_setPosition(gameSprites.base, (sfVector2f){0, 500});
-        sfRectangleShape_setFillColor(gameSprites.base, sfColor_fromRGB(150,0,0));
-    }
+    gameSprites.gameover = sfSprite_createFromFile(spriteMode, "gameover.png",
+                                                  (sfVector2f){1,1},
+                                                  (sfVector2f){WIDTH/2, HEIGHT/2});
+
+    gameSprites.enemyBlack = sfSprite_createFromFile(spriteMode, "enemyBlack.png", (sfVector2f){ 0.7, 0.7}, (sfVector2f){-100, -100});
+    gameSprites.enemyRed = sfSprite_createFromFile(spriteMode, "enemyBlue.png", (sfVector2f){ 0.7, 0.7}, (sfVector2f){-100, -100});
+    gameSprites.enemyGreen = sfSprite_createFromFile(spriteMode, "enemyRed.png", (sfVector2f){ 0.7, 0.7}, (sfVector2f){-100, -100});
+    gameSprites.enemyBlue = sfSprite_createFromFile(spriteMode, "enemyGreen.png", (sfVector2f){ 0.7, 0.7}, (sfVector2f){-100, -100});
+
+    gameSprites.fillLifeBar = sfRectangleShape_create();
+    sfRectangleShape_setSize(gameSprites.fillLifeBar, (sfVector2f){436, 35});
+    sfRectangleShape_setPosition(gameSprites.fillLifeBar, (sfVector2f){182, 507.5});
+    sfRectangleShape_setFillColor(gameSprites.fillLifeBar, sfColor_fromRGB(255,255,255));
+
+    gameSprites.fillLifeBar2 = sfRectangleShape_create();
+    sfRectangleShape_setSize(gameSprites.fillLifeBar2, (sfVector2f){energy, ENERGYY});
+    sfRectangleShape_setPosition(gameSprites.fillLifeBar2, (sfVector2f){182, 507.5});
+    sfRectangleShape_setFillColor(gameSprites.fillLifeBar2, sfColor_fromRGB(100,0,0));
+
+    // GUI
+    gameSprites.base = sfRectangleShape_create();
+    sfRectangleShape_setSize(gameSprites.base, (sfVector2f){WIDTH, 100});
+    sfRectangleShape_setPosition(gameSprites.base, (sfVector2f){0, 500});
+    sfRectangleShape_setFillColor(gameSprites.base, sfColor_fromRGB(150,0,0));
 }
 
-sfSprite* sfSprite_createFromFile(const char* filename, sfVector2f scale, sfVector2f pos)
+sfSprite* sfSprite_createFromFile(char* spriteMode, const char* filename, sfVector2f scale, sfVector2f pos)
 {
     sfTexture* texture;
     sfSprite* sprite;
 
-    char img[6]="imgs/";
+    char img[40];
+    strcpy(img, "imgs/");
+    strcat(img, spriteMode);
+    strcat(img,"/");
 
     texture = sfTexture_createFromFile(strcat(img,filename), NULL);
     sprite = sfSprite_create();
@@ -380,78 +607,96 @@ void setEnemies(TYPE_LEVEL* level)
     map = fopen(level->mapName, "r"); // It will open the file whose name is a parameter (dir: bin/debug)
     puts(level->mapName);
 
-    int sizeFile;
-    int posXAux = 0;    // Initializing it
+    int posXAux = 40;    // Initializing it
     int posYAux = 0;    // Initializing it
     int speed;          // It's the first char in the file map
     char direction;     // It's the second char in the file map
-    int i;
     char buffer = '\n'; // Initializing it
-
-    sizeFile = 149; // It was arbitrary
 
     rewind(map);
 
+    fseek(map, 0, SEEK_SET);
     fscanf(map, "%d", &speed); // It will put the first char, as a number, in speed
     level->levelSpeed = speed;
-
-    fseek(map, 1, SEEK_SET);    // Jumping to second char of the file
-    fscanf(map, "%c", &direction);  // Putting the second char of the file, which is the direction of movement of the enemies, in direction
+    //printf("Velocidade do %s: %d", speed);
+    fseek(map, 2, SEEK_SET);    // Jumping to second char of the file
+    direction = getc(map);  // Putting the second char of the file, which is the direction of movement of the enemies, in direction
     level->direction = direction;
 
-    for(i = 0; i < sizeFile; i++)
+    nEnemies = 0;
+    liveEnemies = 0;
+
+    while(!feof(map))
     {
        buffer = getc(map);
        switch(buffer)
        {
            case '\n':   posYAux += DIST_ENEMY_Y;
-                        posXAux = 0;                // It means that, in the file, we passed the an enemy's line, then we have to put the next enemies in other Y
+                        posXAux = 40;                // It means that, in the file, we passed the an enemy's line, then we have to put the next enemies in other Y
                         break;
 
            case ' ':    posXAux += DIST_ENEMY_X;    // The blanks in the file means the distance between the enemies. This is the reason why we are adding posXAux
                         break;
 
            case 'x':    gameSprites.enemies[nEnemies] = createEnemy(rand()%4, posXAux, posYAux);    // We are using rand, but the intention is to use a defined color
+                        gameSprites.enemies[nEnemies].initialPos = (sfVector2f){posXAux, posYAux};
                         nEnemies++;
+                        liveEnemies++;
                         break;
 
            default:     break;
        }
     }
+    fclose(map);
 }
 
 TYPE_ENEMIES createEnemy(int color, int posX, int posY)
 {
     TYPE_ENEMIES enemy;
 
+    enemy.color = color;
     enemy.posX = posX;  // Making easier to lead with coordinates of enemy
     enemy.posY = posY;
     enemy.flag = 1;     // Seting him to alive (1)
+    enemy.fire.flag = 0;
 
-    switch(color)
-    {
-            case 0: enemy.enemySprite = sfSprite_createFromFile("enemyBlack.png", (sfVector2f){ 0.7, 0.7}, (sfVector2f){posX, posY});
-                    break;
-            case 1: enemy.enemySprite = sfSprite_createFromFile("enemyBlue.png", (sfVector2f){ 0.7, 0.7}, (sfVector2f){posX, posY});
-                    break;
-            case 2: enemy.enemySprite = sfSprite_createFromFile("enemyRed.png", (sfVector2f){ 0.7, 0.7}, (sfVector2f){posX, posY});
-                    break;
-            case 3: enemy.enemySprite = sfSprite_createFromFile("enemyGreen.png", (sfVector2f){ 0.7, 0.7}, (sfVector2f){posX, posY});
-                    break;
-
-
-    }
     return enemy;
 }
 
 void drawEnemies(sfRenderWindow* window, TYPE_ENEMIES enemies[MAXENEMIES], int sizeArray)
 {
     int i;
+    sfVector2f bufferPos;
 
     for(i = 0; i < sizeArray; i++)
     {
-        if(enemies[i].flag == 1)            // This function only draws alive enemys
-            sfRenderWindow_drawSprite(window, (gameSprites.enemies[i]).enemySprite, NULL);
+        bufferPos.x = gameSprites.enemies[i].posX;
+        bufferPos.y = gameSprites.enemies[i].posY;
+
+        // This function only draws alive enemys
+        if(enemies[i].flag == 1)
+        {
+            switch(gameSprites.enemies[i].color)
+            {
+            case 1:
+                sfSprite_setPosition(gameSprites.enemyRed, bufferPos);
+                sfRenderWindow_drawSprite(window, gameSprites.enemyRed, NULL);
+                break;
+            case 2:
+                sfSprite_setPosition(gameSprites.enemyGreen, bufferPos);
+                sfRenderWindow_drawSprite(window, gameSprites.enemyGreen, NULL);
+                break;
+            case 3:
+                sfSprite_setPosition(gameSprites.enemyGreen, bufferPos);
+                sfRenderWindow_drawSprite(window, gameSprites.enemyGreen, NULL);
+                break;
+            // If its anything else (including 0), it's gonna be black
+            default:
+                sfSprite_setPosition(gameSprites.enemyBlack, bufferPos);
+                sfRenderWindow_drawSprite(window, gameSprites.enemyBlack, NULL);
+
+            }
+        }
     }
 }
 
@@ -460,10 +705,11 @@ int isAtSamePoint(TYPE_ENEMIES* enemies, int *sizeArray, sfSprite* sprite)
     int i;
 
     int numberOfEnemyDead = -1; // If there isn't an enemy dead in this array, it will be -1.
-                           // Else, it will be the number of the enemy dead in it's array.
+                                // Else, it will be the number of the enemy dead in it's array.
 
-    float sizeEnemyX = sfSprite_getLocalBounds(enemies[0].enemySprite).width/2;         // It's divided by two 'cause this function gives the entire size, and we just want a half
-    float sizeEnemyY = sfSprite_getLocalBounds(enemies[0].enemySprite).height/2;
+    // It's divided by two 'cause this function gives the entire size, and we just want a half
+    float sizeEnemyX = sfSprite_getLocalBounds(gameSprites.enemyBlack).width/2;
+    float sizeEnemyY = sfSprite_getLocalBounds(gameSprites.enemyBlack).height/2;
 
     sfVector2f positionSprite = sfSprite_getPosition(sprite);
 
@@ -480,12 +726,423 @@ int isAtSamePoint(TYPE_ENEMIES* enemies, int *sizeArray, sfSprite* sprite)
     return numberOfEnemyDead;
 }
 
-void returnToLife(TYPE_ENEMIES enemies[MAXENEMIES], int sizeArray)
+void moveEnemies(TYPE_LEVEL level, TYPE_ENEMIES enemies[MAXENEMIES], int sizeArray, float dtime)
 {
     int i; // Count
-
-    for(i = 0; i < sizeArray; i++)
+    switch(level.direction)
     {
-        enemies[i].flag = 1;            // It's setting the enemy's flag to 1, which means that he is alive
+        case 'R':   for(i = 0; i < sizeArray; i++)
+                    {
+                        if(enemies[i].posX >= 0 && enemies[i].posX <= 800 && enemies[i].flag == 1)
+                        {
+                            enemies[i].posX += SPEED_ENEMY*dtime*level.levelSpeed;
+                        }
+                        else
+                        {
+                            enemies[i].posX = 0;
+                        }
+                    }
+                    break;
+        case 'L':   for(i = 0; i < sizeArray; i++)
+                    {
+                        if(enemies[i].posX >= 0 && enemies[i].posX <= 800 && enemies[i].flag == 1)
+                        {
+                            enemies[i].posX -= SPEED_ENEMY*dtime*level.levelSpeed;
+                        }
+                        else
+                        {
+                            enemies[i].posX = 800;
+                        }
+                    }
+                    break;
+        default: break;
     }
 }
+
+void gameMenu(sfRenderWindow* window)
+{
+    int i; // Count
+    int flagButton = -1; // 0 - Play / 1 - Options / 2 - Credits
+    int gameoverFlag = 0; // If it's 0, you don't want to play again after the game over screen. If it's 1, you want.
+    sfEvent event;
+
+    TYPE_MENU patternMenu;
+
+    patternMenu.font = sfFont_createFromFile("Quantify Bold v2.6.ttf");
+
+    /// Initializing background
+    patternMenu.menuBackground = sfSprite_createFromFile("certinho", "background.png",
+                                                        (sfVector2f){3.125, 2.3475},
+                                                        (sfVector2f){WIDTH/2, HEIGHT/2});
+
+    /// Initializing megamania logo
+    patternMenu.megamaniaLogo = sfText_create();
+    sfText_setCharacterSize(patternMenu.megamaniaLogo, 60);
+    sfText_setString(patternMenu.megamaniaLogo, "M E G A M A N I A");
+    sfText_setFont(patternMenu.megamaniaLogo, patternMenu.font);
+    sfText_setOrigin(patternMenu.megamaniaLogo, (sfVector2f){sfText_getLocalBounds(patternMenu.megamaniaLogo).width/2, sfText_getLocalBounds(patternMenu.megamaniaLogo).height/2});
+    sfText_setPosition(patternMenu.megamaniaLogo, (sfVector2f){WIDTH/2, HEIGHT/6});
+
+    /// Initializing play button
+    patternMenu.buttons[0] = createButton("P L A Y", 40, (sfVector2f){WIDTH/2, 320}, (sfVector2f){BUTTON_WIDTH, BUTTON_HEIGHT}, sfColor_fromRGB( 18, 16, 18));
+
+    /// Initializing option button
+    patternMenu.buttons[1] = createButton("O P T I O N S", 40, (sfVector2f){WIDTH/2, 430}, (sfVector2f){BUTTON_WIDTH, BUTTON_HEIGHT}, sfColor_fromRGB( 18, 16, 18));
+
+    /// Initializing credits button
+    patternMenu.buttons[2] = createButton("C R E D I T S", 40, (sfVector2f){WIDTH/2, 540}, (sfVector2f){BUTTON_WIDTH, BUTTON_HEIGHT}, sfColor_fromRGB( 18, 16, 18));
+
+    /// Loop of the screen
+    while(sfRenderWindow_isOpen(window))
+    {
+        /// Code to close the window
+        while(sfRenderWindow_pollEvent(window, &event))
+        {
+            // Close window : exit
+            if (event.type == sfEvtClosed)
+                sfRenderWindow_close(window);
+        }
+
+        /// Checking if mouse is on a button
+        for(i = 0; i < 3; i++)
+        {
+            if((sfMouse_getPosition(window).y <= (370 + i*110) && sfMouse_getPosition(window).y >= (270 + i*110)) &&
+               (sfMouse_getPosition(window).x <= 600 && sfMouse_getPosition(window).x >= 200))
+            {
+                sfRectangleShape_setOutlineColor(patternMenu.buttons[i].base, sfColor_fromRGB( 255, 255, 255));
+                // Check click
+                if(sfMouse_isButtonPressed(sfMouseLeft))
+                {
+                    flagButton = i;
+                }
+            }
+            else
+                sfRectangleShape_setOutlineColor(patternMenu.buttons[i].base, sfColor_fromRGB( 0, 0, 0));
+        }
+        switch(flagButton)
+        {
+            case 0:         /// Level 1
+                            // Loading sprites of the game
+                            loadGameSprites("certinho", &level1);
+                        do
+                        {
+                            // Setting the Level 1's enemies
+                            setEnemies(&level1);
+
+                            // Beginning the Level 1
+                            layoutStage(window, level1);
+
+                            /// Level 2
+                            if(numberlifes > 0) // It means that the player did not dead 3 times in the first level
+                            {
+                                // Setting the Level 2's enemies
+                                setEnemies(&level2);
+
+                                // Beginning the Level 2
+                                layoutStage(window, level2);
+                            }
+
+                            gameoverFlag = 0; // Making possible to enter in a game over, and then you finish the levels
+
+                            if(numberlifes <= 0) // It means that the player dead 3 times, then, he can back and play again the first level
+                            {
+                                // Show Game Over screen
+                                layoutGameOver(window, event); // Here, you can click and you will starts from beginning again
+                                gameoverFlag = 1;
+                                // Setting the enemies to beginning definitions
+                                liveEnemies = nEnemies;
+                            }
+                        }while(gameoverFlag);
+                        score = 0;
+                        flagButton = -1;
+                        break;
+
+            case 1:     break;
+
+            case 2:     showCredits(window);
+                        flagButton = -1;
+                        break;
+
+            default:    break;
+        }
+
+        /// Drawing on the screen
+        sfRenderWindow_clear(window, sfColor_fromRGB(0,0,0));
+        // Background
+        sfRenderWindow_drawSprite(window, patternMenu.menuBackground, NULL);
+        // Logo
+        sfRenderWindow_drawText(window, patternMenu.megamaniaLogo, NULL);
+        // Buttons
+        for(i = 0; i < 3; i++)
+        {
+            sfRenderWindow_drawRectangleShape(window, patternMenu.buttons[i].base, NULL);
+            sfRenderWindow_drawText(window, patternMenu.buttons[i].text, NULL);
+        }
+        sfRenderWindow_display(window);
+    }
+}
+
+TYPE_BUTTON createButton(char stringText[50], float textSize, sfVector2f position, sfVector2f baseSize, sfColor cBase)
+{
+    TYPE_BUTTON button;
+
+    sfFont* font;
+    font = sfFont_createFromFile("Quantify Bold v2.6.ttf"); // Font of the utton
+
+        // Text of button
+    button.text = sfText_create();
+    sfText_setCharacterSize(button.text, textSize);
+    sfText_setString(button.text, stringText);
+    sfText_setFont(button.text, font);
+    sfText_setOrigin(button.text, (sfVector2f){sfText_getLocalBounds(button.text).width/2, sfText_getLocalBounds(button.text).height/2});   // The origin will be at the center of the text
+    sfText_setPosition(button.text, position);
+        // Base of button
+    button.base = sfRectangleShape_create();
+    sfRectangleShape_setSize(button.base, baseSize);
+    sfRectangleShape_setOrigin(button.base, (sfVector2f){baseSize.x/2, baseSize.y/2});  // The origin will be at the center of the sprite
+    sfRectangleShape_setFillColor(button.base, cBase);
+    sfRectangleShape_setOutlineColor(button.base, sfColor_fromRGB( 0, 0, 0));   // Setting the outlinecolor to black
+    sfRectangleShape_setOutlineThickness(button.base, 1);
+    sfRectangleShape_setPosition(button.base, (sfVector2f){ position.x, position.y});
+
+    return button;
+}
+
+void showCredits (sfRenderWindow* window)
+{
+    sfEvent event;
+
+    TYPE_BUTTON backButton;
+    int flagButton = 0; // If it's 0, you didn't click on the button. Else, you did.
+
+    sfFont* font;
+
+    sfText* creators;   // It talks about who creates this game
+    sfText* spritesPack;    // Where we pick these sprites
+    sfText* why;        // Why we did it
+
+    sfSprite* background;
+
+    background = sfSprite_createFromFile("certinho", "background.png",
+                                         (sfVector2f){3.125, 2.3475},
+                                         (sfVector2f){WIDTH/2, HEIGHT/2});
+
+    // Setting font
+    font = sfFont_createFromFile("Quantify Bold v2.6.ttf"); // Font of the utton
+
+    /// Setting texts
+        // Set creators
+    creators = sfText_create();
+    sfText_setCharacterSize(creators, 20);
+    sfText_setString(creators, "C R E A T O R S :\nProgrammer: Marcos Samuel Landi\nProgrammer: Henry Bernardo K. de Avila.");
+    sfText_setFont(creators, font);
+    sfText_setOrigin(creators, (sfVector2f){sfText_getLocalBounds(creators).width/2, sfText_getLocalBounds(creators).height/2});   // The origin will be at the center of the text
+    sfText_setPosition(creators, (sfVector2f){WIDTH/2, 200});
+        // Set spritesPack
+    spritesPack = sfText_create();
+    sfText_setCharacterSize(spritesPack, 20);
+    sfText_setString(spritesPack, "S P R I T E ' S  P A C K :\nSpace Shooter (Redux, plus fonts and sounds)\nby Kenney Vleugels (www.kenney.nl).");
+    sfText_setFont(spritesPack, font);
+    sfText_setOrigin(spritesPack, (sfVector2f){sfText_getLocalBounds(spritesPack).width/2, sfText_getLocalBounds(spritesPack).height/2});   // The origin will be at the center of the text
+    sfText_setPosition(spritesPack, (sfVector2f){WIDTH/2, 300});
+        // Set why
+    why = sfText_create();
+    sfText_setCharacterSize(why, 20);
+    sfText_setString(why, "W H Y  H A V E  Y O U  D O N E  T H I S ?\nWell, this game is the final project of Programming and Algorythms, a subject in UFRGS.");
+    sfText_setFont(why, font);
+    sfText_setOrigin(why, (sfVector2f){sfText_getLocalBounds(why).width/2, sfText_getLocalBounds(why).height/2});   // The origin will be at the center of the text
+    sfText_setPosition(why, (sfVector2f){WIDTH/2, 400});
+
+    // Setting back's button
+    backButton = createButton("B A C K", 40, (sfVector2f){WIDTH - 200, 100}, (sfVector2f){200, 100}, sfColor_fromRGB(18, 16, 18));
+//
+    do
+    {
+        /// Code to close the window
+        while(sfRenderWindow_pollEvent(window, &event))
+        {
+            // Close window : exit
+            if (event.type == sfEvtClosed)
+                sfRenderWindow_close(window);
+        }
+
+        if((sfMouse_getPosition(window).y <= 150 && sfMouse_getPosition(window).y >= 50) &&
+                   (sfMouse_getPosition(window).x <= 700 && sfMouse_getPosition(window).x >= 500))
+        {
+            sfRectangleShape_setOutlineColor(backButton.base, sfColor_fromRGB( 255, 255, 255));
+            // Check click
+            if(sfMouse_isButtonPressed(sfMouseLeft))
+            {
+                flagButton = 1;
+            }
+        }
+        else
+            sfRectangleShape_setOutlineColor(backButton.base, sfColor_fromRGB( 0, 0, 0));
+
+
+        /// Drawing on the screen
+        sfRenderWindow_clear(window, sfColor_fromRGB(0,0,0));
+            // Background
+        sfRenderWindow_drawSprite(window, background, NULL);
+            // BackButton
+        sfRenderWindow_drawRectangleShape(window, backButton.base, NULL);
+        sfRenderWindow_drawText(window, backButton.text, NULL);
+            // Why
+        sfRenderWindow_drawText(window, why, NULL);
+            // Sprites pack
+        sfRenderWindow_drawText(window, spritesPack, NULL);
+            // Creators
+        sfRenderWindow_drawText(window, creators, NULL);
+        sfRenderWindow_display(window);
+    }while(!flagButton);
+}
+
+float scoreByEnergyBar (float energy, float maxEnergy)
+{
+    float answer;
+
+    answer = energy/(maxEnergy/40) * 50;    // We want the energy bar to have 40 parts, so we divide it by 40 and divide the current energy by this
+                                            // fraction, that tells us how many "slices" of energy we have. each slice is worth 50 energy (which is defined at the PDF)
+    return answer;
+}
+/*int fillEnergyBarAnimation(sfRenderWindow* window, TYPE_ALLSPRITES sprites, int dtime, float * energy)
+{
+    while(*energy < ENERGYMAX)
+    {
+        *energy += (ENERGYMAX/3)*dtime;
+        if(*energy > ENERGYMAX)
+            *energy = ENERGYMAX;
+        sfRectangleShape_setSize(sprites.fillLifeBar2, (sfVector2f){*energy, ENERGYY});
+        sfRenderWindow_drawSprite(window, sprites.fillLifeBar2, NULL);
+    }
+    return *energy;
+}*/
+
+int outOfScreen(sfSprite* sprite, float hScreen, float wScreen)
+{
+    int answer = 0;
+
+    if(sfSprite_getPosition(sprite).x > wScreen || sfSprite_getPosition(sprite).x < 0 ||
+       sfSprite_getPosition(sprite).y > hScreen || sfSprite_getPosition(sprite).y < -40)
+        answer = 1;
+
+    return answer;
+}
+
+int Enemies_Shooting(TYPE_ENEMIES enemies[], int numberEnemies, int livingEnemies, int levelSpeed)
+{
+    int i;
+    int aux;
+
+    int fireNmb = 0;
+
+    srand(time(NULL));
+
+    if(livingEnemies >= levelSpeed)     // If livingEnemies >= levelSpeed, this for won't be in an eternal loop. But, if livingEnemies < levelSpeed, then it will.
+        for(i = 0; i < levelSpeed; i++)
+        {
+            aux = rand() % numberEnemies;
+
+            if(enemies[aux].flag == 1 && enemies[aux].fire.flag == 0)      // If the enemy is alive, he can shoot
+            {
+                enemies[aux].fire.flag = 1;
+                enemies[aux].fire.posX = enemies[aux].posX;
+                enemies[aux].fire.posY = enemies[aux].posY + 40;
+                fireNmb++;
+            }
+            else                            // Else, he can't shoot. Then, we have to pick other enemy
+                i--;
+        }
+    else
+        for(i = 0; i < livingEnemies; i++)  // As the first for will be in an eternal loop if livingEnemies < levelSpeed, this won't.
+        {
+            aux = rand() % numberEnemies;
+
+            if(enemies[aux].flag == 1 && enemies[aux].fire.flag == 0)      // If the enemy is alive, he can shoot
+            {
+                enemies[aux].fire.flag = 1;
+                enemies[aux].fire.posX = enemies[aux].posX;
+                enemies[aux].fire.posY = enemies[aux].posY + 40;
+                fireNmb++;
+            }
+            else                            // Else, he can't shoot. Then, we have to pick other enemy
+                i--;
+        }
+
+    return fireNmb;
+}
+
+void Enemies_DrawFires(sfRenderWindow *window, sfSprite* sprite, TYPE_ENEMIES enemies[], int numberEnemies)
+{
+    int i;
+
+    for(i = 0; i < numberEnemies; i++)
+    {
+        if(enemies[i].fire.flag == 1)
+        {
+            sfSprite_setPosition(sprite, (sfVector2f){enemies[i].fire.posX, enemies[i].fire.posY});
+            sfRenderWindow_drawSprite(window, sprite, NULL);
+        }
+    }
+}
+
+int Enemies_MovingFires(float speedY, TYPE_ENEMIES enemies[], int numberEnemies, float dtime, TYPE_PLAYERSHIP player)
+{
+    int i;
+    int flag = 0; // If it's 1, one of these fires hit the player.
+
+    for(i = 0; i < numberEnemies; i++)
+    {
+        if(enemies[i].fire.flag == 1)
+        {
+            if(enemies[i].fire.posY < HEIGHT &&
+               !sfSprite_CollisionPoint(player.shipSprite, (sfVector2f){enemies[i].fire.posX, enemies[i].fire.posY}))
+            {
+                enemies[i].fire.posY += speedY*dtime;
+            }
+            else
+                if(sfSprite_CollisionPoint(player.shipSprite, (sfVector2f){enemies[i].fire.posX, enemies[i].fire.posY}))
+                {
+                    enemies[i].fire.flag = 0;
+                    flag = 1;
+                }
+                else
+                    enemies[i].fire.flag = 0;
+        }
+    }
+    return flag;
+}
+
+int Enemies_HowManyFires(TYPE_ENEMIES enemies[], int numberEnemies)
+{
+    int i;
+    int nbFires = 0;
+
+    for(i = 0; i < numberEnemies; i++)
+    {
+        if(enemies[i].fire.flag == 1)
+            nbFires++;
+    }
+
+    return nbFires;
+}
+
+int sfSprite_CollisionPoint(sfSprite* sprite, sfVector2f point)
+{
+    int answer = 0;
+
+    float spriteWidth = sfSprite_getLocalBounds(sprite).width;
+    float spriteHeight = sfSprite_getLocalBounds(sprite).height;
+
+    float posX = sfSprite_getPosition(sprite).x;
+    float posY = sfSprite_getPosition(sprite).y;
+
+    if(point.x >= (posX - spriteWidth/2.0) &&
+       point.x <= (posX + spriteWidth/2.0) &&
+       point.y >= (posY - spriteHeight/2.0)&&
+       point.y <= (posY + spriteHeight/2.0))
+       answer = 1;
+
+    return answer;
+}
+
