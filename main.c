@@ -12,6 +12,7 @@
 #define DIST_ENEMY_Y 50
 #define SPEED_ENEMY 200
 #define ENEMYFIRE_SPEED 300
+#define FRAMES_TO_DIR 2000
 // Button's constants
 #define BUTTON_WIDTH 400
 #define BUTTON_HEIGHT 100
@@ -118,6 +119,7 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level)
     int isFireable = 1;
     int pPressedLastTime = 0;
     int shouldLoop = 1; // Used to indicate whether it should continue looping or not
+    int isB = 0; // If direction is 'B', it's 1. Else, 0.
 
     // Animations
     int animating = 1; // 1 - started stage, 2 - just died
@@ -125,6 +127,10 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level)
     float timeOfDeath = 0; // How many seconds the death animation has been running
     float timeOfLife = 0; // How many seconds the "being born" animation has been running
     float timeOfPhaseOut = 0; //How many seconds the "getting out of level" animation has been running
+
+    // Enemy move
+    int count = 0;
+    char directionEnemyMove = level.direction;
 
     // Enemy dead in this frame
     int positionEnemyDead;
@@ -154,8 +160,8 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level)
     // Energy Bar
     energy = 0;
 
-    // Enemies's fires
-    Enemies_Shooting(gameSprites.enemies, nEnemies, liveEnemies, level.levelSpeed);
+    if(directionEnemyMove == 'B')
+        isB = 1;
 
     /// Loop of the layout
     while(shouldLoop)
@@ -231,7 +237,23 @@ void layoutStage(sfRenderWindow* window, TYPE_LEVEL level)
         }
 
         /// Enemies
+        if(isB && count < (FRAMES_TO_DIR/level.levelSpeed))
+        {
+            level.direction = 'R';
+            count++;
+        }
+        else
+            if(isB && count >= (FRAMES_TO_DIR/level.levelSpeed))
+            {
+                level.direction = 'L';
+                if(count == ((FRAMES_TO_DIR*2)/level.levelSpeed - 1))
+                    count = 0;
+                else
+                    count++;
+            }
+
         Enemies_Move(level, gameSprites.enemies, nEnemies, dtime);
+
 
         // Enemies's fires
         if(!Enemies_HowManyFires(gameSprites.enemies, nEnemies))
@@ -568,7 +590,7 @@ void gameMenu(sfRenderWindow* window)
                         do
                         {
                             // Setting the Level 1's enemies
-                            Enemies_Set(&level1, &gameSprites.enemies, &nEnemies, &liveEnemies);
+                            Enemies_Set(&level1, gameSprites.enemies, &nEnemies, &liveEnemies);
 
                             // Beginning the Level 1
                             layoutStage(window, level1);
@@ -577,7 +599,7 @@ void gameMenu(sfRenderWindow* window)
                             if(numberlifes > 0) // It means that the player did not dead 3 times in the first level
                             {
                                 // Setting the Level 2's enemies
-                                Enemies_Set(&level2, &gameSprites.enemies, &nEnemies, &liveEnemies);
+                                Enemies_Set(&level2, gameSprites.enemies, &nEnemies, &liveEnemies);
 
                                 // Beginning the Level 2
                                 layoutStage(window, level2);
@@ -669,30 +691,27 @@ void showCredits (sfRenderWindow* window)
                                          (sfVector2f){WIDTH/2, HEIGHT/2});
 
     // Setting font
-    font = sfFont_createFromFile("Quantify Bold v2.6.ttf"); // Font of the utton
+    font = sfFont_createFromFile("Quantify Bold v2.6.ttf"); // Font of the text
 
     /// Setting texts
         // Set creators
     creators = sfText_create();
     sfText_setCharacterSize(creators, 20);
-    sfText_setString(creators, "C R E A T O R S :\nProgrammer: Marcos Samuel Landi\nProgrammer: Henry Bernardo K. de Avila.");
+    sfText_setString(creators, "C R E A T O R S: \nMarcos Samuel Landi\nHenry Bernardo K. de Avila.");
     sfText_setFont(creators, font);
-    sfText_setOrigin(creators, (sfVector2f){sfText_getLocalBounds(creators).width/2, sfText_getLocalBounds(creators).height/2});   // The origin will be at the center of the text
-    sfText_setPosition(creators, (sfVector2f){WIDTH/2, 200});
+    sfText_setPosition(creators, (sfVector2f){WIDTH/8, 200});
         // Set spritesPack
     spritesPack = sfText_create();
     sfText_setCharacterSize(spritesPack, 20);
-    sfText_setString(spritesPack, "S P R I T E ' S  P A C K :\nSpace Shooter (Redux, plus fonts and sounds)\nby Kenney Vleugels (www.kenney.nl).");
+    sfText_setString(spritesPack, "S P R I T E ' S  P A C K :\n Space Shooter (Redux, plus fonts and sounds)\nby Kenney Vleugels (www.kenney.nl).");
     sfText_setFont(spritesPack, font);
-    sfText_setOrigin(spritesPack, (sfVector2f){sfText_getLocalBounds(spritesPack).width/2, sfText_getLocalBounds(spritesPack).height/2});   // The origin will be at the center of the text
-    sfText_setPosition(spritesPack, (sfVector2f){WIDTH/2, 300});
+    sfText_setPosition(spritesPack, (sfVector2f){WIDTH/8, 300});
         // Set why
     why = sfText_create();
     sfText_setCharacterSize(why, 20);
-    sfText_setString(why, "W H Y  H A V E  Y O U  D O N E  T H I S ?\nWell, this game is the final project of Programming and Algorythms, a subject in UFRGS.");
+    sfText_setString(why, "W H Y  H A V E  Y O U  D O N E  T H I S ?\n  Well, this game is the final project of\n Programming and Algorythms, a subject in UFRGS.");
     sfText_setFont(why, font);
-    sfText_setOrigin(why, (sfVector2f){sfText_getLocalBounds(why).width/2, sfText_getLocalBounds(why).height/2});   // The origin will be at the center of the text
-    sfText_setPosition(why, (sfVector2f){WIDTH/2, 400});
+    sfText_setPosition(why, (sfVector2f){WIDTH/8, 400});
 
     // Setting back's button
     backButton = createButton("B A C K", 40, (sfVector2f){WIDTH - 200, 100}, (sfVector2f){200, 100}, sfColor_fromRGB(18, 16, 18));
@@ -737,7 +756,7 @@ void showCredits (sfRenderWindow* window)
         sfRenderWindow_display(window);
     }while(!flagButton);
 }
-
+//
 float scoreByEnergyBar (float energy, float maxEnergy)
 {
     float answer;
