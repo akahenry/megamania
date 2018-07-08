@@ -18,7 +18,6 @@ typedef struct str_menu
     sfFont* font;
     sfText* megamaniaLogo;
     TYPE_BUTTON buttons[3]; // 0 - PLAY / 1 - OPTIONS / 2 - CREDITS
-    sfSprite* menuBackground;
 } TYPE_MENU;
 
 // Struct for fire
@@ -54,6 +53,7 @@ typedef struct str_sprites
     TYPE_PLAYERSHIP ship;
     sfSprite* fire;
     sfSprite* enemyFire;
+    sfSprite* menuBackground;
     sfSprite* background;
     sfSprite* life;
     sfSprite* lifebar;
@@ -76,6 +76,7 @@ typedef struct str_level
     char direction; // Can be 'R', to right, 'L', to left, or 'B', to both synchronously.
     int numberEnemies;
     int paused;
+    float lastShot;
 } TYPE_LEVEL;
 
 #endif // STRUCTS_H_INCLUDED
